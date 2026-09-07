@@ -9,7 +9,7 @@ A Multi-Agent Framework to Enhance Student Learning Through Guided Thinking"
 | Agent | Socratic stage owned | Theory grounding |
 |---|---|---|
 | **Socratic Facilitator** | Wonder / Hypothesis — opens the dialogue, picks the question category, elicits a clear hypothesis, guards against topic drift | Socratic Method, Constructivism |
-| **Cognitive Diagnostic** | Elenchus — actively probes the hypothesis against a curated misconception bank, estimates SOLO level | SOLO Taxonomy, Cognitive Diagnostic Theory |
+| **Cognitive Diagnostic** | actively probes the hypothesis against a curated misconception bank, estimates SOLO level | SOLO Taxonomy, Cognitive Diagnostic Theory |
 | **Scaffolding Curator** | Acceptance/Rejection + Action — calibrates hint / sub-question / worked example, judges when to stop | Zone of Proximal Development, Cognitive Load Theory |
 
 All three call the **same external LLM API** with a different role-specific system
