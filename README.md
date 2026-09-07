@@ -1,8 +1,8 @@
 # Socratic-Agent — Prototype
 
 A lightweight, prompt-engineered multi-agent Socratic tutor spanning five introductory
-Python topics, implementing the architecture from the BSc thesis proposal *"Socratic-Agent:
-A Multi-Agent Framework to Enhance Student Learning Through Guided Thinking"* (Objective 2).
+Python topics, implementing the architecture of "Socratic-Agent:
+A Multi-Agent Framework to Enhance Student Learning Through Guided Thinking"
 
 ## The three agents
 
