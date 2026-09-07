@@ -13,7 +13,7 @@ A Multi-Agent Framework to Enhance Student Learning Through Guided Thinking"
 | **Scaffolding Curator** | Acceptance/Rejection + Action — calibrates hint / sub-question / worked example, judges when to stop | Zone of Proximal Development, Cognitive Load Theory |
 
 All three call the **same external LLM API** with a different role-specific system
-prompt each (no separate fine-tuned models — see `socratic_agent/llm_client.py`).
+prompt each 
 
 ## Topic catalog (`socratic_agent/topic_bank.py`)
 
