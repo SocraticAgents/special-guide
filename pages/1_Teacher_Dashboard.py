@@ -19,7 +19,16 @@ import pandas as pd
 import streamlit as st
 
 from socratic_agent import db
-from socratic_agent.topic_bank import get_topic, misconception_label
+from socratic_agent.labels import nice
+from socratic_agent.topic_bank import TOPICS, get_topic, misconception_label
+
+
+# Internal objective IDs (VO1, LO1, LI2, ...) -> thesis Table 4.2 IDs (LO1-LO11), used for every display.
+DESIGN_ID = {o.id: o.design_id for t in TOPICS for o in t.learning_objectives}
+
+
+def _lo(objective_id: str | None) -> str:
+    return DESIGN_ID.get(objective_id, objective_id or "—")
 
 
 def _topic_name(topic_id: str) -> str:
@@ -28,6 +37,9 @@ def _topic_name(topic_id: str) -> str:
 
 st.set_page_config(page_title="Socratic-Agent — Teacher Dashboard", page_icon="📈", layout="wide")
 db.init_db()
+from socratic_agent import ui  # noqa: E402
+ui.style()
+ui.nav(signed_in="student_id" in st.session_state)
 
 SOLO_ORDER = ["prestructural", "unistructural", "multistructural", "relational", "extended_abstract"]
 SOLO_RANK = {level: i + 1 for i, level in enumerate(SOLO_ORDER)}
@@ -103,6 +115,47 @@ l3.metric(
     f"{leaks['sessions_with_leak_attempt']} / {leaks['total_sessions']}" if leaks["total_sessions"] else "—",
 )
 
+st.subheader("🎯 Objectives and rule enforcement")
+st.caption(
+    "Objectives mastered through a passed transfer check vs. closed at the round limit (not "
+    "mastered), and how often the system refused a rule the model broke."
+)
+obj = db.objective_stats()
+o1, o2, o3, o4, o5 = st.columns(5)
+o1.metric("Objectives mastered", obj["mastered"], help="Mastery gate passed: transfer question asked earlier and a justified (relational+) transfer answer.")
+o2.metric("Closed at round limit", obj["not_mastered"], help="Reached the support round limit. Counted as covered, never as mastered.")
+o3.metric("Mastery claims refused", obj["gate_rejections"])
+o4.metric("Support-level skips", obj["support_violations"])
+o5.metric("Fade violations", obj["fade_violations"], help="Support rose on a turn whose own SOLO estimate went up.")
+
+outcomes = db.objective_outcomes()
+if outcomes:
+    st.markdown("**Outcome per learning objective** — SOLO levels are the tutor's estimates")
+    odf = pd.DataFrame(outcomes)
+    summary = (
+        odf.groupby("design_id")["status"].value_counts().unstack(fill_value=0)
+        .reindex(columns=["mastered", "closed_at_cap", "in_progress"], fill_value=0)
+        .rename_axis("LO")
+        .rename(columns=nice)
+    )
+    summary = summary.reindex(sorted(summary.index, key=lambda x: int(x[2:])))
+    st.dataframe(summary, width="stretch")
+
+st.subheader("⏱️ Model usage")
+st.caption("Token counts for the per-session cost estimate and response time of each model call.")
+usage = db.usage_stats()
+if usage["calls"]:
+    u1, u2, u3, u4 = st.columns(4)
+    u1.metric("Model calls", usage["calls"], help=f"{usage['failed_calls']} failed")
+    u2.metric("Input tokens / session", f"{usage['prompt_tokens_per_session']:,.0f}")
+    u3.metric("Output tokens / session", f"{usage['completion_tokens_per_session']:,.0f}")
+    u4.metric(
+        "Median call latency",
+        f"{usage['median_call_latency_ms'] / 1000:.1f} s" if usage["median_call_latency_ms"] else "—",
+    )
+else:
+    st.caption("No model calls recorded yet.")
+
 st.divider()
 
 # --------------------------------------------------------------------------------
@@ -115,17 +168,21 @@ if not students:
 
 student_rows = [
     {
+        "Participant": s["participant_code"],
         "Student": s["name"] if show_names else "•••• (hidden)",
         "Student ID": s["student_id"],
+        "Consent": s["consent_version"] or "⚠️ none recorded",
         "Sessions": s["n_sessions"],
         "Last active": s["last_active"],
     }
     for s in students
 ]
-st.dataframe(pd.DataFrame(student_rows), use_container_width=True, hide_index=True)
+st.dataframe(pd.DataFrame(student_rows), width="stretch", hide_index=True)
 
 id_options = [s["student_id"] for s in students]
-label_lookup = {s["student_id"]: (s["name"] if show_names else s["student_id"]) for s in students}
+label_lookup = {
+    s["student_id"]: (s["name"] if show_names else f"{s['participant_code']} ({s['student_id']})") for s in students
+}
 selected_id = st.selectbox("Inspect a student", id_options, format_func=lambda sid: label_lookup[sid])
 
 sessions = db.list_sessions(selected_id)
@@ -149,7 +206,7 @@ transcript = db.get_transcript(selected_session)
 left, right = st.columns([1, 1])
 
 with left:
-    st.markdown("**SOLO level over the session**")
+    st.markdown("**SOLO estimate over the session** (LLM-rated per response, not a classifier)")
     solo_rows = [
         {"turn": snap["turn_index"], "SOLO level": SOLO_RANK[snap["solo_level_estimate"]]}
         for snap in snapshots
@@ -169,9 +226,33 @@ with left:
     if last_snapshot:
         found = json.loads(last_snapshot["misconceptions_json"])
         finished = json.loads(last_snapshot["finished_objectives_json"])
+        not_mastered = json.loads(last_snapshot["not_mastered_json"] or "[]")
+        mastered = [o for o in finished if o not in not_mastered]
         st.markdown("**Misconceptions found:** " + (", ".join(misconception_label(m) for m in found) or "none"))
-        st.markdown("**Objectives completed:** " + (", ".join(finished) or "none yet"))
+        st.markdown("**Objectives mastered:** " + (", ".join(map(_lo, mastered)) or "none yet"))
+        st.markdown("**Closed without mastery (cap):** " + (", ".join(map(_lo, not_mastered)) or "none"))
         st.markdown(f"**Final stage:** {last_snapshot['stage']}")
+        records = json.loads(last_snapshot["objective_records_json"] or "[]")
+        if records:
+            st.markdown("**Objective records** (entry → exit SOLO estimate, how Elenchus ended, support used)")
+            st.dataframe(pd.DataFrame([
+                {"LO": r["design_id"], "Status": nice(r["status"]), "Entry": nice(r["entry_solo"]), "Exit": nice(r["exit_solo"]),
+                 "Elenchus ended by": nice(r["elenchus_exit"]), "Support": " → ".join(map(nice, r["support_sequence"])) or "—",
+                 "Transfer asked": "yes" if r["transfer_asked"] else "no"}
+                for r in records
+            ]), width="stretch", hide_index=True)
+
+    st.markdown("**Support sequence** (starts at a hint and rises one level at a time)")
+    support_rows = [
+        {"Turn": snap["turn_index"], "LO": _lo(snap["objective_id"]), "Support": nice(snap["scaffold_level_last"]),
+         "SOLO": nice(snap["solo_level_estimate"]), "Stage": nice(snap["stage"])}
+        for snap in snapshots
+        if snap["stage"] == "ACCEPT_REJECT" or snap["scaffold_level_last"]
+    ]
+    if support_rows:
+        st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
+    else:
+        st.caption("No support moves in this session.")
 
 with right:
     st.markdown("**Transcript**")

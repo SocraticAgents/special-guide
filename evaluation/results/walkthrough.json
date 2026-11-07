@@ -1,0 +1,226 @@
+{
+  "objective_records": [
+    {
+      "objective_id": "LO1",
+      "design_id": "LO5",
+      "status": "mastered",
+      "entry_solo": "unistructural",
+      "exit_solo": "extended_abstract",
+      "peak_solo": "extended_abstract",
+      "elenchus_exit": "gap_surfaced",
+      "support_sequence": [
+        "hint"
+      ],
+      "ceiling_sequence": [
+        "hint"
+      ],
+      "transfer_asked": true,
+      "misconceptions": [
+        "LOOP_M3_CHECK_ORDER",
+        "LOOP_M1_OFF_BY_ONE"
+      ],
+      "student_turns": 7,
+      "solo_gain": 3
+    },
+    {
+      "objective_id": "LO2",
+      "design_id": "LO6",
+      "status": "closed_at_cap",
+      "entry_solo": "unistructural",
+      "exit_solo": "multistructural",
+      "peak_solo": "multistructural",
+      "elenchus_exit": "round_cap",
+      "support_sequence": [
+        "hint",
+        "simpler_sub_question",
+        "hint"
+      ],
+      "ceiling_sequence": [
+        "hint",
+        "simpler_sub_question",
+        "hint"
+      ],
+      "transfer_asked": false,
+      "misconceptions": [
+        "LOOP_M2_VAR_VANISHES"
+      ],
+      "student_turns": 7,
+      "solo_gain": 1
+    },
+    {
+      "objective_id": "LO3",
+      "design_id": "LO7",
+      "status": "mastered",
+      "entry_solo": "unistructural",
+      "exit_solo": "extended_abstract",
+      "peak_solo": "extended_abstract",
+      "elenchus_exit": "gap_surfaced",
+      "support_sequence": [
+        "hint"
+      ],
+      "ceiling_sequence": [
+        "hint"
+      ],
+      "transfer_asked": true,
+      "misconceptions": [],
+      "student_turns": 6,
+      "solo_gain": 3
+    }
+  ],
+  "solo_trajectory": [
+    {
+      "turn_index": 6,
+      "objective_id": "LO1",
+      "agent": "Diagnostician",
+      "level": "unistructural",
+      "movement": "first_rating",
+      "evidence": "it prints until it gets to 3",
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 8,
+      "objective_id": "LO1",
+      "agent": "Diagnostician",
+      "level": "multistructural",
+      "movement": "up",
+      "evidence": "maybe 3 is printed and then it stops",
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 10,
+      "objective_id": "LO1",
+      "agent": "Scaffolder",
+      "level": "unistructural",
+      "movement": "down",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 12,
+      "objective_id": "LO1",
+      "agent": "Scaffolder",
+      "level": "relational",
+      "movement": "jump_up",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 14,
+      "objective_id": "LO1",
+      "agent": "Scaffolder",
+      "level": "extended_abstract",
+      "movement": "up",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 19,
+      "objective_id": "LO2",
+      "agent": "Diagnostician",
+      "level": "unistructural",
+      "movement": "first_rating",
+      "evidence": "the loop is finished so its variables get deleted",
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 21,
+      "objective_id": "LO2",
+      "agent": "Diagnostician",
+      "level": "prestructural",
+      "movement": "down",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 23,
+      "objective_id": "LO2",
+      "agent": "Diagnostician",
+      "level": "prestructural",
+      "movement": "stable",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 25,
+      "objective_id": "LO2",
+      "agent": "Scaffolder",
+      "level": "prestructural",
+      "movement": "stable",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 27,
+      "objective_id": "LO2",
+      "agent": "Scaffolder",
+      "level": "prestructural",
+      "movement": "stable",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 29,
+      "objective_id": "LO2",
+      "agent": "Scaffolder",
+      "level": "multistructural",
+      "movement": "jump_up",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 35,
+      "objective_id": "LO3",
+      "agent": "Diagnostician",
+      "level": "unistructural",
+      "movement": "first_rating",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 37,
+      "objective_id": "LO3",
+      "agent": "Diagnostician",
+      "level": "relational",
+      "movement": "jump_up",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 39,
+      "objective_id": "LO3",
+      "agent": "Scaffolder",
+      "level": "relational",
+      "movement": "stable",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 41,
+      "objective_id": "LO3",
+      "agent": "Scaffolder",
+      "level": "unistructural",
+      "movement": "down",
+      "evidence": null,
+      "source": "llm_estimate"
+    },
+    {
+      "turn_index": 43,
+      "objective_id": "LO3",
+      "agent": "Scaffolder",
+      "level": "extended_abstract",
+      "movement": "jump_up",
+      "evidence": null,
+      "source": "llm_estimate"
+    }
+  ],
+  "counters": {
+    "leak_attempts": 1,
+    "leak_hard_blocks": 0,
+    "gate_rejections": 1,
+    "support_violations": 0,
+    "fade_violations": 0,
+    "drift_events": 0
+  },
+  "final_stage": "DONE",
+  "closing_message": "That's the end of this session's objectives. You showed you could apply 2 of 3 to a new case; the parked one(s) (LO6) are worth another go in a new session."
+}

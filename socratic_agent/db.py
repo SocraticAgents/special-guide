@@ -31,12 +31,41 @@ import secrets
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 _DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "socratic_agent.db")
 DB_PATH = os.getenv("SOCRATIC_AGENT_DB", _DEFAULT_DB_PATH)
 
 _PBKDF2_ITERATIONS = 200_000
+
+# Version of the consent text shown at sign-up (app.py). Bump it whenever that text changes,
+# so every stored record is traceable to the exact wording that authorised it (Sec 3.6).
+CONSENT_VERSION = "v1.0"
+
+# Columns added after the first pilot build; init_db() adds them to an existing database.
+_MIGRATIONS = {
+    "students": {
+        "participant_code": "TEXT",
+        "consent_version": "TEXT",
+        "consented_at": "TEXT",
+    },
+    "snapshots": {
+        "not_mastered_json": "TEXT NOT NULL DEFAULT '[]'",
+        "gate_rejections": "INTEGER NOT NULL DEFAULT 0",
+        "support_violations": "INTEGER NOT NULL DEFAULT 0",
+        "question_category": "TEXT",
+        "drift_detected": "INTEGER NOT NULL DEFAULT 0",
+        "diagnostic_evidence": "TEXT",
+        # V1 learner model (socratic_agent/learner_model.py)
+        "solo_source": "TEXT",
+        "solo_movement": "TEXT",
+        "support_ceiling": "TEXT",
+        "fade_violations": "INTEGER NOT NULL DEFAULT 0",
+        "objective_records_json": "TEXT NOT NULL DEFAULT '[]'",
+        "solo_trajectory_json": "TEXT NOT NULL DEFAULT '[]'",
+    },
+}
 
 
 class AuthError(RuntimeError):
@@ -108,8 +137,42 @@ def init_db() -> None:
                 transfer_check_asked INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
+
+            -- One row per model call: token usage for the cost estimate (Sec 3.5) and
+            -- latency for the responsiveness criterion (Table 4.30).
+            CREATE TABLE IF NOT EXISTS llm_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(session_id),
+                turn_index INTEGER NOT NULL,
+                provider TEXT,
+                model TEXT,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                latency_ms INTEGER NOT NULL,
+                ok INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
+        for table, columns in _MIGRATIONS.items():
+            existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            for column, ddl in columns.items():
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        # Backfill participant codes for accounts created before codes existed.
+        for row in conn.execute(
+            "SELECT student_id FROM students WHERE participant_code IS NULL ORDER BY created_at"
+        ).fetchall():
+            conn.execute(
+                "UPDATE students SET participant_code = ? WHERE student_id = ?",
+                (_next_participant_code(conn), row["student_id"]),
+            )
+
+
+def _next_participant_code(conn) -> str:
+    """Sequential code (P01, P02, ...) — the only participant label used in analysis (Sec 3.6)."""
+    n = conn.execute("SELECT COUNT(*) AS c FROM students WHERE participant_code IS NOT NULL").fetchone()["c"]
+    return f"P{n + 1:02d}"
 
 
 def _hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
@@ -121,14 +184,20 @@ def _hash_password(password: str, salt: bytes | None = None) -> tuple[str, str]:
 
 
 def create_student(student_id: str, name: str, password: str) -> None:
-    """Sign-up: creates a new student. Raises AuthError if student_id is already taken."""
+    """Sign-up: creates a new student. Raises AuthError if student_id is already taken.
+
+    Only called after the consent box is ticked, so the consent version and time are
+    stored with the account.
+    """
     salt_hex, hash_hex = _hash_password(password)
+    now = _now()
     try:
         with _connect() as conn:
             conn.execute(
-                "INSERT INTO students (student_id, name, password_hash, password_salt, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (student_id, name, hash_hex, salt_hex, _now()),
+                "INSERT INTO students (student_id, name, password_hash, password_salt, created_at, "
+                "participant_code, consent_version, consented_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (student_id, name, hash_hex, salt_hex, now, _next_participant_code(conn),
+                 CONSENT_VERSION, now),
             )
     except sqlite3.IntegrityError as exc:
         raise AuthError(f"Student ID '{student_id}' is already registered.") from exc
@@ -187,7 +256,10 @@ def log_snapshot(session_id: str, turn_index: int, state) -> None:
             "INSERT INTO snapshots (session_id, turn_index, stage, objective_id, "
             "solo_level_estimate, misconceptions_json, scaffold_level_last, elenchus_rounds, "
             "scaffold_rounds, finished_objectives_json, leak_attempts, leak_hard_blocks, "
-            "transfer_check_asked, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "transfer_check_asked, not_mastered_json, gate_rejections, support_violations, "
+            "question_category, drift_detected, diagnostic_evidence, solo_source, solo_movement, "
+            "support_ceiling, fade_violations, objective_records_json, solo_trajectory_json, "
+            "created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 session_id,
                 turn_index,
@@ -202,8 +274,35 @@ def log_snapshot(session_id: str, turn_index: int, state) -> None:
                 state.leak_attempts,
                 state.leak_hard_blocks,
                 int(state.transfer_check_asked),
+                json.dumps(state.not_mastered_objectives),
+                state.gate_rejections,
+                state.support_violations,
+                state.question_category_last,
+                int(state.drift_detected_last),
+                state.diagnostic_evidence,
+                "llm_estimate" if state.solo_level_estimate else None,
+                state.solo_movement_last,
+                state.support_ceiling_last,
+                state.fade_violations,
+                json.dumps([r.as_dict() for r in state.objective_records]),
+                json.dumps([asdict(o) for o in state.solo_trajectory]),
                 _now(),
             ),
+        )
+
+
+def log_llm_calls(session_id: str, turn_index: int, calls: list[dict]) -> None:
+    if not calls:
+        return
+    with _connect() as conn:
+        conn.executemany(
+            "INSERT INTO llm_calls (session_id, turn_index, provider, model, prompt_tokens, "
+            "completion_tokens, latency_ms, ok, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            [
+                (session_id, turn_index, c["provider"], c["model"], c["prompt_tokens"],
+                 c["completion_tokens"], c["latency_ms"], int(c["ok"]), _now())
+                for c in calls
+            ],
         )
 
 
@@ -212,7 +311,8 @@ def log_snapshot(session_id: str, turn_index: int, state) -> None:
 def list_students():
     with _connect() as conn:
         return conn.execute(
-            "SELECT s.student_id, s.name, s.created_at, COUNT(se.session_id) AS n_sessions, "
+            "SELECT s.student_id, s.name, s.participant_code, s.consent_version, s.created_at, "
+            "COUNT(se.session_id) AS n_sessions, "
             "MAX(se.started_at) AS last_active "
             "FROM students s LEFT JOIN sessions se ON se.student_id = s.student_id "
             "GROUP BY s.student_id ORDER BY last_active DESC"
@@ -284,6 +384,93 @@ def leak_stats() -> dict[str, int]:
         "total_hard_blocks": total_hard_blocks,
         "sessions_with_leak_attempt": sessions_with_attempt,
         "total_sessions": len(latest_per_session),
+    }
+
+
+def _latest_snapshots(conn) -> dict[str, sqlite3.Row]:
+    rows = conn.execute("SELECT * FROM snapshots ORDER BY session_id, turn_index, id").fetchall()
+    latest: dict[str, sqlite3.Row] = {}
+    for row in rows:
+        latest[row["session_id"]] = row
+    return latest
+
+
+def objective_stats() -> dict[str, int]:
+    """Mastered vs. closed-at-the-cap objectives, plus hard-block counters (Table 4.E)."""
+    with _connect() as conn:
+        latest = _latest_snapshots(conn)
+    closed = sum(len(json.loads(r["finished_objectives_json"])) for r in latest.values())
+    not_mastered = sum(len(json.loads(r["not_mastered_json"] or "[]")) for r in latest.values())
+    return {
+        "closed": closed,
+        "mastered": closed - not_mastered,
+        "not_mastered": not_mastered,
+        "gate_rejections": sum(r["gate_rejections"] for r in latest.values()),
+        "support_violations": sum(r["support_violations"] for r in latest.values()),
+        "fade_violations": sum((r["fade_violations"] or 0) for r in latest.values()),
+    }
+
+
+def objective_outcomes() -> list[dict]:
+    """One row per objective attempted, from each session's latest snapshot.
+
+    status is "mastered" (gate passed) or "closed_at_cap" (NOT mastery) or "in_progress".
+    entry/exit/peak SOLO are LLM estimates (source "llm_estimate"), not classifier output.
+    """
+    with _connect() as conn:
+        latest = _latest_snapshots(conn)
+        topics = {r["session_id"]: r["topic"] for r in conn.execute("SELECT session_id, topic FROM sessions")}
+    rows = []
+    for session_id, snap in latest.items():
+        for rec in json.loads(snap["objective_records_json"] or "[]"):
+            rows.append({"session_id": session_id, "topic": topics.get(session_id), **rec})
+    return rows
+
+
+def student_objective_records(student_id: str) -> list[dict]:
+    """Every objective record of one student across sessions, oldest session first.
+
+    Feeds the student's own progress page (socratic_agent/progress.py).
+    """
+    with _connect() as conn:
+        sessions = conn.execute(
+            "SELECT session_id, topic, started_at FROM sessions WHERE student_id = ? ORDER BY started_at, rowid",
+            (student_id,),
+        ).fetchall()
+        out = []
+        for s in sessions:
+            snap = conn.execute(
+                "SELECT objective_records_json FROM snapshots WHERE session_id = ? ORDER BY turn_index DESC, id DESC LIMIT 1",
+                (s["session_id"],),
+            ).fetchone()
+            if snap is None:
+                continue
+            for rec in json.loads(snap["objective_records_json"] or "[]"):
+                out.append({"session_id": s["session_id"], "topic": s["topic"], "started_at": s["started_at"], **rec})
+    return out
+
+
+def usage_stats() -> dict[str, float | int | None]:
+    """Token usage and latency across all recorded model calls (Sec 3.5, Table 4.30)."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT session_id, prompt_tokens, completion_tokens, latency_ms, ok FROM llm_calls"
+        ).fetchall()
+    if not rows:
+        return {"calls": 0}
+    latencies = sorted(r["latency_ms"] for r in rows if r["ok"])
+    sessions = {r["session_id"] for r in rows}
+    prompt = sum(r["prompt_tokens"] or 0 for r in rows)
+    completion = sum(r["completion_tokens"] or 0 for r in rows)
+    return {
+        "calls": len(rows),
+        "failed_calls": sum(1 for r in rows if not r["ok"]),
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "sessions": len(sessions),
+        "prompt_tokens_per_session": prompt / len(sessions),
+        "completion_tokens_per_session": completion / len(sessions),
+        "median_call_latency_ms": latencies[len(latencies) // 2] if latencies else None,
     }
 
 

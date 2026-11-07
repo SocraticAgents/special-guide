@@ -80,18 +80,83 @@ and aggregated across all students (Teacher Dashboard) — a direct evaluation m
 mirroring the "leak-robustness" methodology in the proposal's own literature review
 (Table 2.5.2.1).
 
+## V1 verification tests
+
+`tests/test_v1_verification.py` reproduces the deterministic checks of thesis Table 4.28
+(T01–T18) with the LLM replaced by a scripted stub, plus the V1.1 acceptance tests from
+Table 4.29 (whole-token leak matching, mastery gate incl. justified transfer, not-mastered
+recording, SOLO rated by the Curator, support starting at hint and rising one level at a time),
+answer separation (Table 4.A) and consent/participant codes (Sec 3.6):
+
+```bash
+python -m unittest tests.test_v1_verification -v
+```
+
+`python -m evaluation.export_research_data` writes the anonymised CSV export (participant
+code only, no name or student ID; accounts without a stored consent version are excluded).
+
+## V1 learner model, honest claims, design-matrix verification
+
+V1 implements the Part A design matrix (DD1–DD6) and keeps three claims honest in code:
+
+| Claim | What the code actually does | Where |
+|---|---|---|
+| SOLO level | An **LLM estimate** of one response (Diagnostician in Elenchus, Curator during support), stored with `source="llm_estimate"`. There is no trained SOLO classifier. Only the *movement* between two estimates (up / jump_up / stable / down) is computed in code. | `learner_model.py`, `state.record_solo` |
+| Scaffolding | The Curator **chooses** the support level (prompt). The orchestrator **bounds** it: first move = hint; rise at most one level; fade one level on a turn whose own SOLO estimate went up. Rules informed by ZPD/fading — not a ZPD measurement. Breaches are regenerated once, then counted (`support_violations`, `fade_violations`). | `learner_model.support_ceiling`, `orchestrator._scaffolder_turn` |
+| Mastery | Every objective ends **MASTERED** (transfer question asked earlier + justified relational-or-higher transfer answer) or **CLOSED_AT_CAP** (support round limit; *not* mastery, shown to the student as "parked"). The two are never merged in the UI, dashboard or export. | `learner_model.ObjectiveRecord`, `orchestrator._close_objective` |
+
+Objectives carry their thesis Table 4.2 IDs (`design_id`, LO1–LO11). The design matrix lives in
+`socratic_agent/design_matrix.py`; a test checks that every test it names exists.
+
+**Student progress and motivation (DD7 / FR13).** `socratic_agent/progress.py` turns the stored
+objective records into a feedback card when an objective closes, seven milestones that reward
+learning behaviour (never speed), a session summary, the **My Progress** page
+(`pages/0_My_Progress.py`) and one suggested next step, including a one-objective retry of a
+parked objective. All of it is template-based — no LLM call — so it cannot leak an answer, and
+mastered and parked are always shown separately.
+
+**Demo mode.** `SOCRATIC_AGENT_DEMO=1` replays the scripted walkthrough through the real
+orchestrator instead of calling the LLM (Loops topic; a "Play scripted walkthrough" button
+appears in the sidebar). Use it with a throw-away `SOCRATIC_AGENT_DB`, never the pilot database.
+
+**Thesis documents** (`thesis_docs/`): `make_figures.py` (Figure 4.2 and Part B figures),
+`take_screenshots.py` (headless Chrome against demo mode), `build_chapter4.py` (merges the
+hand-written design in `writting/Chapter 4.docx` with the generated implementation sections into
+`writting/Chapter 4 - System Design and Initial Results.docx`, formatted to the Research Office
+guidelines; refuses to build if any test fails), `apply_part_a_corrections.py` and `add_hypotheses.py` (one-off
+records of edits made to the Word drafts).
+
+Full thesis draft (`writting/Socratic_Agent_Revised_Draft_2026-11-07.docx`), in order:
+1. `build_chapter4.py` – rebuild Chapter 4 (Harvard citations, guideline format);
+2. `merge_into_draft.py` – replace Chapter 4 in the draft (needs `pip install docxcompose`; when re-running,
+   first restore `thesis_docs/backups/draft.before-ch4-merge.docx`);
+3. `format_draft.py` – format the whole draft to the guidelines, add missing captions, fill the table
+   of contents and lists (page numbers measured with LibreOffice; update fields in Word after edits)
+   and add the Harvard reference list from `references.py` (when re-running, first restore
+   `thesis_docs/backups/draft.before-format.docx`).
+
+```
+python -m unittest tests.test_v1_verification tests.test_v1_design tests.test_v1_progress -v   # 68 tests, no API key needed
+python -m evaluation.walkthrough      # one complete scripted scenario through the real orchestrator
+python -m evaluation.export_research_data   # + objective_outcomes.csv, solo_labelling.csv
+python -m evaluation.solo_agreement evaluation/export/solo_labelling.csv   # DD2: LLM vs human SOLO labels
+```
+
 ## Setup
 
 ```bash
 cd socratic-agent
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in credentials for your chosen LLM_PROVIDER (anthropic | openai | openrouter)
+cp .env.example .env   # fill in credentials for your chosen LLM_PROVIDER (anthropic | openai | openrouter | gemini)
 streamlit run app.py
 ```
 
 `LLM_PROVIDER=openrouter` uses OpenRouter's OpenAI-compatible endpoint (works with any
 model slug it hosts, e.g. `anthropic/claude-sonnet-4.5`) — see `.env.example`.
+
+`LLM_PROVIDER=gemini` uses Google's OpenAI-compatible Gemini endpoint with `GEMINI_API_KEY`;
+the model is set by `GEMINI_MODEL` (default `gemini-2.5-flash`).
 
 **If you edit anything under `socratic_agent/` while the app is already running**,
 fully restart `streamlit run app.py` (Ctrl+C, then rerun) rather than relying on

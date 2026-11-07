@@ -25,6 +25,7 @@ class LearningObjective:
     seed_question: str  # the Wonder-stage opener the Facilitator can start from
     canonical_answer: str  # what "the answer" is, told to agents so they can self-check for leaking it
     protected_literals: tuple[str, ...]  # literal strings that, if an agent says them, count as a leak
+    design_id: str = ""  # the objective's ID in thesis Table 4.2 (LO1-LO11), used in all reporting
 
 
 @dataclass(frozen=True)
@@ -57,21 +58,9 @@ _VARIABLES = Topic(
     description="How names are bound to values, and Python's dynamic typing.",
     learning_objectives=(
         LearningObjective(
-            id="VO1",
-            statement="Understand that assigning one variable from another copies the value at that moment, for simple types.",
-            seed_question=(
-                "Here's a snippet:\n```python\nx = 5\ny = x\nx = 10\nprint(y)\n```\n"
-                "Before running it in your head — what do you think this prints, and why?"
-            ),
-            canonical_answer=(
-                "It prints 5 — y was assigned the value of x (5) at that moment; reassigning x "
-                "afterward doesn't change y, since y holds its own independent value."
-            ),
-            protected_literals=("prints 5", "y is 5", "y = 5", "5, not 10"),
-        ),
-        LearningObjective(
             id="VO2",
-            statement="Understand Python's dynamic typing: a variable's type is determined by its current value and can change on reassignment.",
+            design_id="LO1",
+            statement="State a variable's type after it has been reassigned to a different kind of value, and explain what determines that type.",
             seed_question=(
                 "```python\nx = 5\nx = \"hello\"\n```\n"
                 "What is the type of x after these two lines, and is this allowed in Python?"
@@ -81,6 +70,20 @@ _VARIABLES = Topic(
                 "reassigned to a value of a different type, and this is completely allowed."
             ),
             protected_literals=("x is a string", "type str", "str type", "now a string"),
+        ),
+        LearningObjective(
+            id="VO1",
+            design_id="LO2",
+            statement="Predict the value a variable holds after the variable it was copied from has been reassigned, and explain why the copy is unaffected.",
+            seed_question=(
+                "Here's a snippet:\n```python\nx = 5\ny = x\nx = 10\nprint(y)\n```\n"
+                "Before running it in your head — what do you think this prints, and why?"
+            ),
+            canonical_answer=(
+                "It prints 5 — y was assigned the value of x (5) at that moment; reassigning x "
+                "afterward doesn't change y, since y holds its own independent value."
+            ),
+            protected_literals=("prints 5", "y is 5", "y = 5", "5, not 10"),
         ),
     ),
     misconceptions=(
@@ -123,7 +126,8 @@ _CONDITIONALS = Topic(
     learning_objectives=(
         LearningObjective(
             id="CO1",
-            statement="Understand that only the first true branch of an if/elif/else chain runs, evaluated top to bottom.",
+            design_id="LO3",
+            statement="Trace which branch of an if/elif/else chain executes, and explain why the remaining branches are skipped even when their conditions are also true.",
             seed_question=(
                 "```python\nx = 15\nif x > 10:\n    print(\"A\")\nelif x > 5:\n    print(\"B\")\nelse:\n    print(\"C\")\n```\n"
                 "What prints here, and why don't the other branches also run?"
@@ -136,7 +140,8 @@ _CONDITIONALS = Topic(
         ),
         LearningObjective(
             id="CO2",
-            statement="Understand that a chained comparison like `5 < x < 10` checks both bounds at once.",
+            design_id="LO4",
+            statement="Evaluate a chained comparison and restate it as the equivalent pair of conditions joined by and.",
             seed_question=(
                 "```python\nx = 7\nprint(5 < x < 10)\n```\nWhat does this print, and what is Python actually checking?"
             ),
@@ -187,7 +192,8 @@ _LOOPS = Topic(
     learning_objectives=(
         LearningObjective(
             id="LO1",
-            statement="Explain the step-by-step execution order of a loop (condition check, body, update, recheck).",
+            design_id="LO5",
+            statement="Trace a loop's execution in order — condition check, body, update, recheck — and explain why it produces exactly the values it does.",
             seed_question=(
                 "Here's a snippet:\n"
                 "```python\n"
@@ -206,7 +212,8 @@ _LOOPS = Topic(
         ),
         LearningObjective(
             id="LO2",
-            statement="Correctly reason about the loop variable's value/scope after the loop terminates.",
+            design_id="LO6",
+            statement="State the loop variable's value after the loop terminates and whether it is still accessible, and explain why.",
             seed_question=(
                 "Suppose that same loop finishes running. What do you think the value of `i` is "
                 "right after the loop ends, and is `i` still usable at all at that point?"
@@ -219,7 +226,8 @@ _LOOPS = Topic(
         ),
         LearningObjective(
             id="LO3",
-            statement="Avoid off-by-one errors when iterating over a range or sequence of known length.",
+            design_id="LO7",
+            statement="Analyse the iteration boundaries of a range() call to avoid an off-by-one error, and justify the start and stop values that produce a stated sequence.",
             seed_question=(
                 "If you wanted to print the numbers 1 through 5 using `range(...)`, what would you "
                 "write inside `range(...)`, and why does that give you exactly those five numbers?"
@@ -283,7 +291,8 @@ _LISTS = Topic(
     learning_objectives=(
         LearningObjective(
             id="LI1",
-            statement="Understand zero-based indexing and negative indices.",
+            design_id="LO8",
+            statement="Identify the element retrieved by a given positive or negative index, and explain how each index type is counted.",
             seed_question=(
                 "```python\nfruits = [\"apple\", \"banana\", \"cherry\"]\nprint(fruits[1])\nprint(fruits[-1])\n```\n"
                 "What do these two lines print, and why?"
@@ -299,7 +308,8 @@ _LISTS = Topic(
         ),
         LearningObjective(
             id="LI2",
-            statement="Understand that assigning a list to another variable aliases the same list object, unlike simple values.",
+            design_id="LO9",
+            statement="Predict the contents of a list after it has been modified through a second variable assigned from it, and explain why both names show the change.",
             seed_question=(
                 "```python\na = [1, 2, 3]\nb = a\nb.append(4)\nprint(a)\n```\n"
                 "What does this print, and why might that be surprising compared to plain numbers?"
@@ -351,7 +361,8 @@ _FUNCTIONS = Topic(
     learning_objectives=(
         LearningObjective(
             id="FN1",
-            statement="Understand that a function's parameter is a local variable that doesn't affect the caller's original variable (for simple types).",
+            design_id="LO10",
+            statement="Predict the value of a caller's variable after it has been passed to a function that modifies its parameter, and explain why the caller's value is unchanged.",
             seed_question=(
                 "```python\ndef add_one(x):\n    x = x + 1\n    return x\n\nn = 5\nresult = add_one(n)\nprint(n)\nprint(result)\n```\n"
                 "What do these two print lines show, and why doesn't n change?"
@@ -365,7 +376,8 @@ _FUNCTIONS = Topic(
         ),
         LearningObjective(
             id="FN2",
-            statement="Understand that a function without an explicit return statement returns None.",
+            design_id="LO11",
+            statement="State what a function returns when it has no return statement, and explain why.",
             seed_question=(
                 "```python\ndef greet(name):\n    print(\"Hello, \" + name)\n\nresult = greet(\"Sam\")\nprint(result)\n```\n"
                 "What does the final print(result) show, and why?"

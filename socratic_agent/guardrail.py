@@ -17,10 +17,12 @@ Layer 1 (semantic, primary): each agent's own JSON schema includes a
 objective's `canonical_answer`. Cheap — it's part of the same API call — and
 it catches a paraphrased leak a literal string match would miss.
 
-Layer 2 (literal, safety net): a deterministic substring check against the
+Layer 2 (literal, safety net): a deterministic check against the
 objective's `protected_literals`, independent of what the model
 self-reports, so a model that is simply wrong about its own output is still
-caught.
+caught. Literals are matched as whole tokens, not plain substrings: "0,1,2"
+must not fire inside a restatement of the wrong answer "0,1,2,3", and
+"prints 5" must not fire inside "prints 50" (verification test T07b).
 
 Either layer tripping counts as a leak; the caller then retries once with a
 repair instruction and, failing that, substitutes a hardcoded safe message
@@ -37,11 +39,28 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _literal_pattern(literal: str) -> re.Pattern[str]:
+    """Whole-token pattern for one normalized literal.
+
+    Word-character edges must not touch another word character, and a literal that
+    starts/ends with a digit must not be part of a longer number sequence such as
+    "0, 1, 2, 3" or "5.5" — that would be a different (often wrong) answer.
+    """
+    norm = _normalize(literal)
+    pre = r"(?<!\w)" if re.match(r"\w", norm[0]) else ""
+    post = r"(?!\w)" if re.match(r"\w", norm[-1]) else ""
+    if norm[0].isdigit():
+        pre = r"(?<!\d,\s)(?<!\d\.)(?<!\d,)(?<!\d\s)" + pre
+    if norm[-1].isdigit():
+        post += r"(?!\s?[,.]?\s?\d)"
+    return re.compile(pre + re.escape(norm) + post)
+
+
 def literal_leak_match(message: str, objective: LearningObjective) -> str | None:
     """Returns the matched protected literal if `message` contains one, else None."""
     normalized = _normalize(message)
     for literal in objective.protected_literals:
-        if _normalize(literal) in normalized:
+        if _literal_pattern(literal).search(normalized):
             return literal
     return None
 
