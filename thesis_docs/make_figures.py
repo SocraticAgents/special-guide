@@ -152,7 +152,7 @@ def solo_trajectory():
         ax.text((x0 + x1) / 2, 4.55, f"{lo}: {label}", ha="center", va="top", fontsize=8.5,
                 color=colors[lo], weight="bold")
     notes = {7: ("transfer answer justified:\ngate passes", (8.0, 3.35)),
-             14: ("estimate rises, support fades;\nsupport cap reached", (9.6, 2.45)),
+             14: ("estimate rises, support fades;\nround limit reached: parked", (9.6, 2.45)),
              19: ("bare answer:\ngate refuses", (17.2, 0.05)),
              5: ("regresses:\nfirst hint", (3.4, 0.15)),
              11: ("Elenchus\nround cap", (10.3, 0.75))}

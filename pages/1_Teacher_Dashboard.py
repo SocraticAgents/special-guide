@@ -56,11 +56,30 @@ if not st.session_state.get("teacher_authed"):
             st.rerun()
         else:
             st.error("Incorrect passcode.")
-    if PASSCODE == "teach123":
-        st.info("Using the default passcode `teach123` — set TEACHER_PASSCODE in .env for real use.")
     st.stop()
 
 st.title("📈 Teacher Dashboard")
+
+with st.expander("⬇️ Download research data (anonymised)"):
+    st.caption(
+        "CSV files keyed by participant code (P01, P02, …): no names or student IDs, and only "
+        "students with recorded consent (Sec 3.6). Transcripts are free text, so read them once "
+        "before sharing: students may name themselves. On Streamlit Cloud the database is wiped "
+        "on restart or redeploy, so download after every study session."
+    )
+    if st.button("Prepare export"):
+        from evaluation.export_research_data import export_zip_bytes
+
+        st.session_state.export_zip = export_zip_bytes()
+        st.session_state.export_name = f"socratic_agent_export_{pd.Timestamp.now():%Y-%m-%d_%H%M}.zip"
+    if "export_zip" in st.session_state:
+        st.download_button(
+            "Download .zip",
+            data=st.session_state.export_zip,
+            file_name=st.session_state.export_name,
+            mime="application/zip",
+        )
+
 show_names = st.toggle("Show names (otherwise only student ID is shown)", value=False)
 
 # --------------------------------------------------------------------------------

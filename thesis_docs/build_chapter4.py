@@ -596,8 +596,6 @@ OUTCOME = {"mastered": "Mastered", "closed_at_cap": "Closed at round limit", "in
 wt_rows = []
 for r in ROWS:
     tutor = r["tutor"].replace(" ¶ ", " | ").replace("```python", "[code:").replace("```", "]")
-    if len(tutor) > 210:
-        tutor = tutor[:207] + "…"
     solo = f"{r['solo_estimate']} ({MOVE[r['movement']]})" if r["solo_estimate"] else "—"
     support = f"{r['support']} (limit: {r['ceiling']})" if r["support"] else "—"
     event = OUTCOME[r["lo_status"]] if r["lo_status"] in ("mastered", "closed_at_cap") else ""

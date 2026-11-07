@@ -124,5 +124,21 @@ def export(out_dir: Path) -> None:
     print("Transcripts are free text: read them once before sharing (Sec 3.6) — students may name themselves.")
 
 
+def export_zip_bytes() -> bytes:
+    """Same anonymised export, packed as an in-memory .zip (used by the Teacher Dashboard download)."""
+    import io
+    import tempfile
+    import zipfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        export(out_dir)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(out_dir.glob("*.csv")):
+                zf.write(path, arcname=path.name)
+    return buf.getvalue()
+
+
 if __name__ == "__main__":
     export(Path(sys.argv[1]) if len(sys.argv) > 1 else Path("evaluation/export"))
