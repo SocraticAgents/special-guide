@@ -163,6 +163,22 @@ fully restart `streamlit run app.py` (Ctrl+C, then rerun) rather than relying on
 Streamlit's save-triggered rerun — its autoreload doesn't reliably reinitialize a
 package module that's already been imported, only the top-level script.
 
+## Deploying (Streamlit Community Cloud)
+
+Vercel can't host this app: Streamlit needs a long-running server with WebSockets, and
+SQLite needs a writable disk.
+
+1. At share.streamlit.io → **New app** → repo `SocraticAgents/special-guide`, branch `main`,
+   main file `app.py`. Under **Advanced settings**, pick Python 3.13.
+2. Paste the keys from `.streamlit/secrets.toml.example` (with real values) into **Secrets**.
+3. Deploy. Dependencies come from `requirements.txt`.
+
+**Data caveat:** the SQLite file (`data/socratic_agent.db`) starts empty on Cloud and is
+**wiped on every restart or redeploy**. Use Cloud for demos only. For real study data,
+host on a service with a persistent disk (e.g. Render: start command
+`streamlit run app.py --server.port $PORT --server.address 0.0.0.0`, plus
+`SOCRATIC_AGENT_DB=/var/data/socratic_agent.db` pointing at the mounted disk).
+
 ## Student flow: sign up / sign in → pick a topic → chat
 
 `app.py` opens on **Sign in** / **Sign up** tabs. Sign-up takes a full name, student ID,
